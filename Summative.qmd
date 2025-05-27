@@ -1,0 +1,366 @@
+---
+title: "Summative"
+format: pdf
+editor: visual
+---
+
+## 
+
+# Executive Summary
+
+The main focus of this study is to identify the variables that will influence the frequency of auto insurance renewals and pricing elasticity. This academic paper offers clients a wide range of theoretical background knowledge and strategies. The dataset provided by the clients in this study is analysed for a total of 13 variables. In the statistical model, the insurance renewal rate is used as a response variable, while the other 13 variables are regarded as potential factors that may affect the renewal rate. To investigate pricing elasticity, the price and discount rate will be highlighted.
+Some elements of the dataset must be adjusted based on the data provided by the client, such as dealing with missing numbers or reducing biases caused by unrealistic values. As a result, data sampling and data transformation are crucial in this investigation.
+In this study, supervised machine learning algorithms are used to achieve accurate and representative analytical results. The logistic regression model and random forest classification model are mostly used to analyse elements that may affect the renewal rate, and statistical models are also utilised to make predictions. To ensure the rigour of the conclusions, the receiver operating characteristic (ROC) and Area Under Curve (AUC) are used to validate the models' viability. The confusion matrix will calculate the accuracy of the models in order to provide clients with an objective analysis.
+
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+rm(list=ls())
+library(tidyverse)
+library(broom)
+library(pROC)
+library(magrittr)
+library(readxl)
+library(tidyverse)
+library(caret)
+library(table1)
+library(janitor)
+
+knitr::opts_chunk$set(warning=FALSE)
+```
+
+# Introduction
+
+Some researchers have demonstrated tremendous interest in the relationship between insurance renewal and consumers, as well as the impact of price on insurance. On the other hand, due to the increasing number of insurance companies and the convenience afforded to consumers by the Internet, competition within the insurance market has increased. Using statistical models and machine learning technologies, this project intends to provide customers with pricing strategies for vehicle insurance. Customers can better understand the influence of existing factors on the renewal rate by using logistic regression and random forest models. The cost flexible concept enables customers to be more price competitive. 
+•	Which factors have the greatest effect on renewal rate?
+•	How does price relate to renewal rates?  
+•	What are the key factors that affect customers' response to price increase (also seen as price elasticity)? In this case price elasticity should be defined as the impact that changes in price  have on a customer's likelihood to renew
+•	What advice would you give to this company on how they might think about pricing these customers?
+
+# Data Understanding
+ 
+
+# Data Preparation
+
+## Data Staging
+
+Loading the data
+
+```{r data_staging}
+insurance_data <- read_xlsx("data/insurance_data_2023.xlsx")
+```
+
+After reading the Excel file using read_xlsx(), the clean_names() function from the janitor package is applied to clean the column names of the insurance_data dataframe. The clean_names() function converts the column names to lowercase, removes special characters, and replaces spaces with underscores.
+
+```{r}
+insurance_data <- read_xlsx("data/insurance_data_2023.xlsx") %>% 
+  janitor::clean_names()
+```
+
+The filter() function is used to remove rows where the "price" column has missing values (NA).
+
+```{r removing_null_values}
+insurance_data <- insurance_data %>%
+  filter(!is.na(price))
+```
+
+#Stage the factor value
+
+The "renewed" column of the insurance_data dataframe will be converted to a factor variable.This conversion allows R to treat the column as a categorical variable and apply statistical analysis or modeling techniques.
+
+```{r}
+insurance_data$renewed <- factor(insurance_data$renewed, levels =c ("0","1"),labels =c("No","Yes"))
+```
+
+
+```{r}
+insurance_data$marital_status <- factor(insurance_data$marital_status)
+```
+
+
+A new column called "new_marital_status" is created using the case_when() function. This function allows for conditional transformations based on the values of the "marital_status" column. If the "marital_status" is equal to "M", the corresponding value in the "new_marital_status" column will be set to "Married". For all other cases, the value will be set to "Not Married".
+
+```{r}
+insurance_data <- insurance_data %>%
+mutate(new_marital_status = case_when(
+marital_status =="M" ~ "Maried",
+TRUE ~ "Not Maried")) %>%
+  
+mutate(new_marital_status = factor(new_marital_status,
+ levels = c("Not Maried","Maried"),
+ labels = c("Not Maried","Maried")))
+
+```
+
+
+```{r}
+insurance_data$payment_method <- factor(insurance_data$payment_method)
+```
+
+```{r}
+insurance_data$acquisition_channel <- factor(insurance_data$acquisition_channel)
+```
+
+```{r}
+insurance_data <- insurance_data %>%
+  filter(gender!="C")
+```
+
+```{r}
+insurance_data$gender <- factor(insurance_data$gender,levels= c("M","F"), labels= c("Male", "Female"))
+```
+
+## Descriptive Statistics
+
+```{r}
+summary(insurance_data$price)
+```
+The minimum value represents the lowest observed price, the maximum value represents the highest observed price, and the quartiles provide information about the spread of the data within the column. The mean represents the average price value in the dataset
+
+
+```{r}
+table1::table1(~price+car_value+years_of_no_claims_bonus+annual_mileage+gender+
+                 new_marital_status+age+payment_method+acquisition_channel+
+                 years_of_tenure_with_current_provider+
+                 actual_change_in_price_vs_last_year|renewed,data =
+                 insurance_data)
+```
+
+## Boxplot 
+
+This is used to create a bar plot of the "years_of_tenure_with_current_provider" variable in the insurance_data dataframe
+
+```{r}
+#| fig-cap: "bar plot" 
+insurance_data %>%   
+ggplot(aes(years_of_tenure_with_current_provider))+geom_bar()
+
+
+```
+
+The mean and median of the "age" column are computed using the mean() and median() functions, respectively. Then, the ggplot() function is used to create a density plot of age, with the "new_marital_status" variable mapped to the color aesthetic. The geom_density() function adds the density plot layer.
+
+```{r}
+mean <- mean(insurance_data$age)
+median <- median(insurance_data$age)
+insurance_data%>%
+ggplot(aes(x=age, color=new_marital_status))+geom_density()
+```
+This plot describes the distribution and characteristics of the "price" variable, such as identifying potential modes, outliers, or skewness in the data.
+
+```{r}
+insurance_data %>%
+ggplot(aes(x=price))+geom_density()
+```
+
+
+This provides a representation of how prices vary across gender and marital status groups in the dataset.
+
+```{r}
+insurance_data %>%
+ggplot(aes(x=price, color=gender))+geom_density()+
+facet_wrap(~new_marital_status)+
+theme(legend.position="top")
+```
+
+
+The x-axis represents the "price" variable, and the y-axis represents the "renewed" variable. Each point in the plot corresponds to a data point in the "insurance_data" dataset.
+```{r}
+#| fig-cap: "bar plot" 
+insurance_data %>%   
+ggplot(aes(x=price, y=renewed)) +geom_point()
+
+```
+
+This calculates the average and median prices from the "insurance_data" dataset and adds vertical lines representing these values on top of the density plot.
+
+```{r}
+average_price <- mean(insurance_data$price)
+median_price <- median(insurance_data$price)
+insurance_data %>%
+  ggplot(aes(x=price)) + geom_density() + geom_vline(xintercept = average_price, 
+                                                     linetype = "dashed") +
+  geom_vline(xintercept = median_price, linetype = "dotted") + scale_x_continuous(n.breaks = 10)
+```
+
+This chunk calculates the cutoff for outliers based on the mean and standard deviation of the "price" variable in the dataset. It then filters the dataset to include only the rows where the price is less than or equal to the outliers_cutoff value.
+```{r}
+outliers_cutoff <- mean(insurance_data$price)+3*sd(insurance_data$price)
+insurance_data <- insurance_data %>% filter(price<=outliers_cutoff)
+```
+
+This chunk create a density plot of the "price" variable in dataset, along with a vertical line indicating the median price.
+```{r}
+avg_price <- mean(insurance_data$price)
+median_price <- median(insurance_data$price)
+insurance_data %>%
+ggplot(aes(x=price))+geom_density()+geom_vline(xintercept=median_price, linetype="dotted")+ggthemes::theme_wsj() +scale_x_continuous(n.break=10)
+```
+
+```{r}
+insurance_data %>%
+  ggplot(aes(y=age))+geom_boxplot()
+```
+
+```{r}
+mean_change <- mean(insurance_data$actual_change_in_price_vs_last_year)
+median_change <- median(insurance_data$actual_change_in_price_vs_last_year)
+outliers_change <- mean_change+3*sd(insurance_data$
+                                      actual_change_in_price_vs_last_year)
+insurance_data %>%
+  filter(actual_change_in_price_vs_last_year<outliers_change & actual_change_in_price_vs_last_year>-outliers_change) %>%
+  ggplot(aes(x=actual_change_in_price_vs_last_year))+geom_density()+
+  geom_vline(xintercept = mean_change, linetype="dashed")+geom_vline(
+    xintercept = median_change,linetype="dotted")+
+  ggthemes::theme_wsj()+scale_x_continuous(n.breaks=10)
+```
+
+#correlation
+
+```{r}
+cor(insurance_data$price+insurance_data$actual_change_in_price_vs_last_year,insurance_data$car_value+insurance_data$annual_mileage)
+```
+
+```{r}
+cor.test(insurance_data$price+insurance_data$actual_change_in_price_vs_last_year,insurance_data$car_value+insurance_data$annual_mileage)
+```
+
+```{r}
+cor.test(insurance_data$price,insurance_data$age)
+```
+```{r}
+t.test(insurance_data$price+insurance_data$actual_change_in_price_vs_last_year+insurance_data$annual_mileage+insurance_data$car_value+insurance_data$age ~ insurance_data$renewed)
+```
+
+
+
+```{r}
+t.test(insurance_data$car_value ~ insurance_data$renewed) 
+```
+
+
+```{r}
+t.test(insurance_data$price ~ insurance_data$renewed)
+
+```
+
+```{r}
+t.test(insurance_data$age~insurance_data$renewed)
+
+```
+
+```{r}
+test_aov <-aov(insurance_data$age+insurance_data$price ~ insurance_data$gender)
+summary(test_aov)
+```
+
+```{r}
+test_aov <- aov(insurance_data$age+insurance_data$price ~insurance_data$renewed+insurance_data$gender+insurance_data$new_marital_status)
+summary(test_aov)
+```
+
+#Regression
+
+```{r modeling}
+regression_model <- glm(renewed~price+gender+age+years_of_tenure_with_current_provider+percentage_change_in_price_vs_last_year, data = insurance_data, family = "binomial")
+summary(regression_model)
+```
+
+
+
+```{r}
+broom::tidy(regression_model.exponentiate = TRUE, digits=2) %>%
+mutate(estimate=round(estimate,3))%>%
+mutate(p.value=round(p.value,3))%>%
+select(term,estimate,p.value)%>%
+ggplot(aes(x = term,y = estimate))+geom_bar(stat="identity")+geom_hline(yintercept=1)+coord_flip()
+```
+
+```{r prediction}
+model_pred <- predict(regression_model, type="response")
+```
+
+
+
+#Analysis
+```{r}
+insurance_data_sample <-insurance_data
+split_data <-round(0.8*nrow(insurance_data_sample))
+train_data <-insurance_data_sample[1:split_data,]
+test_data <- insurance_data_sample[(split_data+1):nrow(insurance_data_sample),]
+```
+
+```{r}
+model <-glm(renewed~price+age+gender,data=train_data,family="binomial")
+```
+
+```{r}
+pred_model<- predict(model,test_data,type="response")
+```
+
+```{r}
+model <-train(renewed~price+age+gender,insurance_data_sample,method="glm", trControl=trainControl(method="cv",number=5,verboseIter = TRUE))
+```
+
+```{r}
+cross_validation <- test_data
+cross_validation$predicted <- pred_model
+
+cross_validation <- cross_validation %>%
+  mutate(predicted_class = ifelse(predicted>0.5,"Yes","No")) %>%
+  mutate(predicted_class = factor(predicted_class,levels = c("Yes","No"), labels = c("Yes", "No")))
+```
+
+```{r}
+table(cross_validation$renewed, cross_validation$predicted_class)
+```
+
+
+```{r}
+caret::confusionMatrix(cross_validation$renewed,cross_validation$predicted_class)
+```
+
+
+
+
+
+```{r}
+model_auc<-pROC::auc(cross_validation$renewed,cross_validation$predicted)
+print(model_auc)
+```
+
+#Analysis 2
+```{r}
+model2 <- glm(rnewed~price+percent_change_in_price_vs_last_year+annual_mileage+car_value+age+payment_method+gender, data=train_data,family="binomial")
+```
+
+
+```{r}
+predicted_data <-predicted(overall_model2,test_data,type="response")
+```
+
+```{r}
+model2 <-train(renewed~price+percentage_change_in_price_vs_last_year+anual_mileage+car_value+age+gender+payment_method,insurance_data_sample,method="glm", trControl=trainControl(method="cv",number=5,verboseIter = TRUE))
+```
+
+
+```{r}
+cross_validation <- test_data
+cross_validation$predicted <- predicted_data
+
+cross_validation <- cross_validation %>%
+  mutate(predicted_class = ifelse(predicted>0.5,"Yes","No")) %>%
+  mutate(predicted_class = factor(predicted_class,levels = c("Yes","No"), labels = c("Yes", "No")))
+```
+
+```{r}
+table(cross_validation$renewed, cross_validation$predicted_class)
+```
+
+
+```{r}
+caret::confusionMatrix(cross_validation$renewed,cross_validation$predicted)
+print(model_auc)
+```
+
+Evaluation
